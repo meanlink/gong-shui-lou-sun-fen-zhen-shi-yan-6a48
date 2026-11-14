@@ -9,3 +9,7 @@ class Dataset(Base):
     records: Mapped[list] = mapped_column(JSON)
     checksum: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[float] = mapped_column(Double)
+    revoked: Mapped[bool] = mapped_column(default=False, server_default='false')
+    revoke_reason: Mapped[str] = mapped_column(String(500), default='')
+    revoked_by: Mapped[str] = mapped_column(String(150), default='')
+    revoked_at: Mapped[float | None] = mapped_column(Double, nullable=True)

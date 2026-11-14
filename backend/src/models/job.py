@@ -1,5 +1,5 @@
 from sqlalchemy import String, JSON, Double, ForeignKey, Boolean
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.config.database import Base
 class Job(Base):
     __tablename__ = 'jobs'
@@ -14,3 +14,7 @@ class Job(Base):
     created_by: Mapped[int] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[float] = mapped_column(Double)
     finished_at: Mapped[float | None] = mapped_column(Double, nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, server_default='false')
+    revoke_reason: Mapped[str] = mapped_column(String(500), default='')
+    revoked_at: Mapped[float | None] = mapped_column(Double, nullable=True)
+    dataset: Mapped['Dataset'] = relationship(lazy='joined')

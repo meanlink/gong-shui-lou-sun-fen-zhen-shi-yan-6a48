@@ -5,7 +5,9 @@ from src.config.settings import REDIS_URL
 from src.models import Dataset, Job
 from src.services.business import metadata
 def create(db, data, user):
-    if not db.get(Dataset,data.dataset_id): raise HTTPException(404,'数据批次不存在')
+    ds=db.get(Dataset,data.dataset_id)
+    if not ds: raise HTTPException(404,'数据批次不存在')
+    if ds.revoked: raise HTTPException(409,'该数据批次已撤回（原因：'+ds.revoke_reason+'），不能再建立试验；更正数据请另建批次重新评估')
     allowed={p['key']:p for p in metadata().get('parameters',[])}
     if set(data.params)-set(allowed): raise HTTPException(422,'包含未知分析参数')
     params={k:p['default'] for k,p in allowed.items()}

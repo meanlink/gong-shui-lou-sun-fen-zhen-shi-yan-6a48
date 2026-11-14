@@ -1,10 +1,7 @@
-import os
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from sqlalchemy import select
 from src.config.database import get_db
-from src.config.settings import ARTIFACT_DIR
-from src.models import Report, Delivery
+from src.models import Report, Delivery, Job
 from src.schemas.report import ReportInput
 from src.middlewares.auth import current_user, admin_only
 from src.services import reports
@@ -22,7 +19,16 @@ def create(data:ReportInput,db=Depends(get_db),u=Depends(admin_only)):
 def toggle(id:int,db=Depends(get_db),u=Depends(admin_only)):
     r=db.get(Report,id)
     if not r:raise HTTPException(404,'分发计划不存在')
-    r.enabled=not r.enabled;record(db,u.email,'report.toggle',{'id':id,'enabled':r.enabled});db.commit()
+    target=not r.enabled
+    if target:
+        job=db.get(Job,r.job_id)
+        if job is None or job.revoked or job.dataset is None or job.dataset.revoked:
+            raise HTTPException(409,'关联试验或数据批次已撤回，该计划不能重新启用；更正数据请另建批次并重新评估')
+        if not job.approved or job.status!='completed':
+            raise HTTPException(409,'关联分析结果已不再是有效批准结论，该计划不能重新启用')
+    r.enabled=target
+    if target: r.auto_paused=False
+    record(db,u.email,'report.toggle',{'id':id,'enabled':r.enabled});db.commit()
     return report_dict(r)
 @router.get('/deliveries')
 def deliveries(db=Depends(get_db),u=Depends(current_user)):
@@ -32,7 +38,7 @@ def download(id:int,format:str='csv',db=Depends(get_db),u=Depends(current_user))
     d=db.get(Delivery,id)
     if not d:raise HTTPException(404,'归档不存在')
     if format not in ('csv','json'):raise HTTPException(422,'支持 CSV 或 JSON')
-    filename=d.filename+('.json' if format=='json' else '')
-    p=os.path.join(ARTIFACT_DIR,filename)
-    if not os.path.exists(p):raise HTTPException(404,'归档文件不存在，请重新安排分发')
-    return FileResponse(p,filename=filename,media_type='application/json' if format=='json' else 'text/csv; charset=utf-8')
+    if d.invalidated:
+        record(db,u.email,'delivery.download_invalidated',{'id':id,'reason':d.invalidate_reason})
+        db.commit()
+    return reports.download_response(d,format)
